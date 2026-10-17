@@ -1,12 +1,13 @@
 import 'package:nfc_manager/nfc_manager.dart';
-import 'package:nfc_manager/platform_tags.dart';
+import 'package:nfc_manager/nfc_manager_android.dart';
 
 /// Chuyển bytes UID sang chuỗi hex dạng 53:27:B3:B1:02:00:01.
 String uidToHex(List<int> bytes) => bytes
     .map((b) => b.toRadixString(16).padLeft(2, '0').toUpperCase())
     .join(':');
 
-/// Đọc UID thẻ NFC (NTAG213 = NfcA) bằng nfc_manager 3.x.
+/// Đọc UID thẻ NFC (NTAG213) bằng nfc_manager 4.x.
+/// UID lấy từ `Tag#id` của Android, không phụ thuộc loại công nghệ thẻ.
 /// Chỉ quét khi app đang mở (foreground).
 class NfcService {
   bool _running = false;
@@ -15,7 +16,8 @@ class NfcService {
 
   Future<bool> isAvailable() async {
     try {
-      return await NfcManager.instance.isAvailable();
+      final availability = await NfcManager.instance.checkAvailability();
+      return availability == NfcAvailability.enabled;
     } catch (_) {
       return false;
     }
@@ -28,9 +30,10 @@ class NfcService {
     _running = true;
     try {
       await NfcManager.instance.startSession(
+        pollingOptions: {NfcPollingOption.iso14443},
         onDiscovered: (NfcTag tag) async {
-          final uid = _uidOf(tag);
-          if (uid != null) onUid(uid);
+          final id = NfcTagAndroid.from(tag)?.id;
+          if (id != null) onUid(uidToHex(id));
         },
       );
     } catch (_) {
@@ -46,19 +49,5 @@ class NfcService {
     } catch (_) {
       // phiên đã đóng
     }
-  }
-
-  static String? _uidOf(NfcTag tag) {
-    final nfcA = NfcA.from(tag);
-    if (nfcA != null) return uidToHex(nfcA.identifier);
-    final ultralight = MifareUltralight.from(tag);
-    if (ultralight != null) return uidToHex(ultralight.identifier);
-    // Dự phòng: tìm trường identifier trong dữ liệu thô của thẻ.
-    for (final v in tag.data.values) {
-      if (v is Map && v['identifier'] is List) {
-        return uidToHex((v['identifier'] as List).cast<int>());
-      }
-    }
-    return null;
   }
 }
