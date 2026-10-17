@@ -13,15 +13,10 @@ Cần Flutter stable, Android Studio, Android SDK và Java 17. Mở PowerShell t
 ```powershell
 flutter doctor
 flutter pub get
-flutter create --platforms=android .
+powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap_android.ps1
 ```
 
-Sau khi Flutter tạo thư mục `android/`, mở `android/app/src/main/AndroidManifest.xml` và thêm các quyền NFC bên trong thẻ `<manifest>`, phía trên `<application>`:
-
-```xml
-<uses-permission android:name="android.permission.NFC" />
-<uses-feature android:name="android.hardware.nfc" android:required="false" />
-```
+Script trên tạo Android host mới bằng Flutter SDK hiện cài trên máy và thêm cấu hình NFC vào Manifest. Nó không sao chép Gradle files từ repo cũ.
 
 Sau đó chạy:
 
