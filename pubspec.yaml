@@ -1,0 +1,23 @@
+name: chamcong_v2
+description: Ứng dụng chấm công NFC offline cho xưởng CNC (3 tiến trình độc lập, 7 trigger).
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  sqflite: ^2.3.3
+  path: ^1.9.0
+  nfc_manager: ^3.5.0
+  dynamic_color: ^1.7.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
