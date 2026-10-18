@@ -4,6 +4,7 @@ import 'app_services.dart';
 import 'ui/history_page.dart';
 import 'ui/home_page.dart';
 import 'ui/tags_page.dart';
+import 'util/time_utils.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -69,13 +70,15 @@ class _AttendanceAppState extends State<AttendanceApp> {
               body: Center(
                 child: Padding(
                   padding: const EdgeInsets.all(24),
-                  child: Text('Không mở được database hoặc NFC service.\n\n${snapshot.error}'),
+                  child: Text(
+                      'Không mở được database hoặc NFC service.\n\n${snapshot.error}'),
                 ),
               ),
             );
           }
           if (!snapshot.hasData) {
-            return const Scaffold(body: Center(child: CircularProgressIndicator()));
+            return const Scaffold(
+                body: Center(child: CircularProgressIndicator()));
           }
           return MainShell(services: snapshot.data!);
         },
@@ -94,53 +97,168 @@ class MainShell extends StatefulWidget {
 }
 
 class _MainShellState extends State<MainShell> {
+  final PageController _pageController = PageController();
   int _index = 0;
+  bool _animating = false;
+
+  static const _pageTitles = ['', 'Lịch sử', 'Thẻ NFC'];
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  /// Bấm thanh điều hướng: trượt tới trang. Trong lúc trượt, bỏ qua
+  /// onPageChanged của các trang trung gian để chỉ báo không nhấp nháy.
+  Future<void> _goTo(int index) async {
+    if (index == _index) return;
+    setState(() => _index = index);
+    _animating = true;
+    try {
+      await _pageController.animateToPage(
+        index,
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOutCubic,
+      );
+    } finally {
+      _animating = false;
+    }
+  }
+
+  void _onPageChanged(int index) {
+    if (_animating) return;
+    if (index != _index) setState(() => _index = index);
+  }
+
+  void _explainNfc(bool ok) {
+    widget.services.onMessage?.call(
+      ok
+          ? 'NFC đang bật: chạm thẻ vào mặt lưng điện thoại để ghi sự kiện.'
+          : 'NFC chưa bật hoặc máy không hỗ trợ. Bật NFC trong Cài đặt rồi mở lại app.',
+      error: !ok,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final services = widget.services;
-    final pages = [
-      HomePage(
-        controller: services.dayController,
-        onMessage: (text, {error = false}) =>
-            services.onMessage?.call(text, error: error),
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
+    final pages = <Widget>[
+      _KeepAlive(
+        child: HomePage(
+          controller: services.dayController,
+          onMessage: (text, {error = false}) =>
+              services.onMessage?.call(text, error: error),
+        ),
       ),
-      HistoryPage(repository: services.repository, controller: services.dayController),
-      TagsPage(services: services),
+      _KeepAlive(
+        child: HistoryPage(
+          repository: services.repository,
+          controller: services.dayController,
+        ),
+      ),
+      _KeepAlive(child: TagsPage(services: services)),
     ];
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Chấm công NFC'),
         centerTitle: false,
+        titleTextStyle: tt.titleLarge
+            ?.copyWith(fontWeight: FontWeight.w700, color: cs.onSurface),
+        // Trang Hôm nay: thứ + ngày thay cho tên app; các trang khác: tên trang.
+        title: ListenableBuilder(
+          listenable: services.dayController,
+          builder: (context, _) => Text(
+            _index == 0
+                ? dayTitle(services.dayController.day)
+                : _pageTitles[_index],
+          ),
+        ),
         actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 16),
-            child: Row(
-              children: [
-                Icon(
-                  services.nfcAvailable ? Icons.nfc : Icons.nfc_outlined,
-                  color: services.nfcAvailable
-                      ? Theme.of(context).colorScheme.primary
-                      : Theme.of(context).colorScheme.outline,
+          // Trạng thái NFC của máy: bấm để xem giải thích.
+          ListenableBuilder(
+            listenable: services,
+            builder: (context, _) {
+              final ok = services.nfcAvailable;
+              return IconButton(
+                tooltip: ok ? 'NFC sẵn sàng' : 'NFC không khả dụng',
+                onPressed: () => _explainNfc(ok),
+                icon: Icon(Icons.nfc, color: ok ? cs.primary : cs.error),
+              );
+            },
+          ),
+          const SizedBox(width: 4),
+        ],
+      ),
+      // Vuốt trái/phải để đổi trang.
+      body: PageView(
+        controller: _pageController,
+        onPageChanged: _onPageChanged,
+        children: pages,
+      ),
+      // Thanh điều hướng nổi, bo tròn, có bóng đổ.
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
+          child: Material(
+            color: cs.surfaceContainerHigh,
+            surfaceTintColor: Colors.transparent,
+            elevation: 10,
+            shadowColor: Colors.black.withAlpha(110),
+            borderRadius: BorderRadius.circular(28),
+            clipBehavior: Clip.antiAlias,
+            child: NavigationBar(
+              height: 64,
+              elevation: 0,
+              backgroundColor: Colors.transparent,
+              surfaceTintColor: Colors.transparent,
+              selectedIndex: _index,
+              onDestinationSelected: _goTo,
+              destinations: const [
+                NavigationDestination(
+                  icon: Icon(Icons.today_outlined),
+                  selectedIcon: Icon(Icons.today),
+                  label: 'Hôm nay',
                 ),
-                const SizedBox(width: 6),
-                Text(services.nfcAvailable ? 'NFC sẵn sàng' : 'NFC không khả dụng',
-                    style: Theme.of(context).textTheme.labelSmall),
+                NavigationDestination(
+                  icon: Icon(Icons.history),
+                  label: 'Lịch sử',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.nfc),
+                  label: 'Thẻ NFC',
+                ),
               ],
             ),
           ),
-        ],
-      ),
-      body: IndexedStack(index: _index, children: pages),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: (index) => setState(() => _index = index),
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.today_outlined), selectedIcon: Icon(Icons.today), label: 'Hôm nay'),
-          NavigationDestination(icon: Icon(Icons.history), label: 'Lịch sử'),
-          NavigationDestination(icon: Icon(Icons.nfc), label: 'Thẻ NFC'),
-        ],
+        ),
       ),
     );
+  }
+}
+
+/// Giữ trạng thái mỗi trang khi vuốt đi (như IndexedStack trước đây).
+class _KeepAlive extends StatefulWidget {
+  const _KeepAlive({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_KeepAlive> createState() => _KeepAliveState();
+}
+
+class _KeepAliveState extends State<_KeepAlive>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
   }
 }
