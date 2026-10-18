@@ -10,23 +10,36 @@ import '../util/time_utils.dart';
 import 'event_rows.dart';
 import 'timeline_painter.dart';
 
-const _weekdays = [
-  'Thứ Hai',
-  'Thứ Ba',
-  'Thứ Tư',
-  'Thứ Năm',
-  'Thứ Sáu',
-  'Thứ Bảy',
-  'Chủ Nhật',
-];
+/// Đổi độ sáng (HSL) của một màu.
+Color _shade(Color c, double delta) {
+  final h = HSLColor.fromColor(c);
+  final l = h.lightness + delta;
+  return h.withLightness(l < 0 ? 0.0 : (l > 1 ? 1.0 : l)).toColor();
+}
 
-String _dayTitle(DateTime d) => '${_weekdays[d.weekday - 1]}, ${dmy(d)}';
+/// Màu tiến trình dùng cho chữ: tối đi trên nền sáng, sáng lên trên nền tối
+/// để vẫn đọc được (vàng CNC thuần gần như vô hình trên nền sáng).
+Color _readable(Color c, Brightness brightness) {
+  final h = HSLColor.fromColor(c);
+  final double l;
+  if (brightness == Brightness.light) {
+    l = h.lightness < 0.42 ? h.lightness : 0.42;
+  } else {
+    l = h.lightness > 0.68 ? h.lightness : 0.68;
+  }
+  return h.withLightness(l).toColor();
+}
 
-/// Home: 3 block dọc.
-/// 1) Timeline + tổng giờ trong ngày
-/// 2) Bảng nút: hàng 1 = Bắt đầu, hàng 2 = Kết thúc; cột = Làm việc | Thiết kế | CNC
-///    (ô Kết thúc CNC chia đôi: tại máy / tại bàn)
-/// 3) Lịch sử trigger, chữ lớn, có đường nối bắt đầu - kết thúc theo tiến trình.
+Color _onColor(Color bg) =>
+    ThemeData.estimateBrightnessForColor(bg) == Brightness.dark
+        ? Colors.white
+        : Colors.black87;
+
+/// Home: 3 block dọc, cùng lề 12 và cùng bo góc. (Ngày hôm nay nằm trên AppBar.)
+/// 1) Card timeline lớn + tổng giờ (màu theo tiến trình) bên dưới
+/// 2) Bảng nút gọn: hàng 1 = Bắt đầu, hàng 2 = Kết thúc; cột = Làm việc | Thiết kế | CNC
+///    (ô Kết thúc CNC chia đôi: tại máy / tại bàn). Tất cả là nút đặc.
+/// 3) Card lịch sử: chữ nhỏ gọn, 3 làn đường mảnh nối bắt đầu - kết thúc.
 class HomePage extends StatefulWidget {
   const HomePage({
     super.key,
@@ -44,6 +57,11 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  static const _margin = 12.0;
+  static const _radius = 20.0;
+  static const _buttonRadius = 14.0;
+  static const _buttonHeight = 50.0;
+
   Timer? _tick;
   DateTime _now = DateTime.now();
   bool _reloading = false;
@@ -86,185 +104,178 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
+    final brightness = Theme.of(context).brightness;
     final events = widget.controller.events;
     final rows = buildEventRows(events);
     final summary = summarize(events, _now);
+    final cardColor = cs.surfaceContainerLow;
 
-    return SafeArea(
-      child: Column(
-        children: [
-          // ---------- Block 1: timeline + tổng giờ ----------
-          Container(
-            margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-            padding: const EdgeInsets.fromLTRB(14, 10, 14, 6),
-            decoration: BoxDecoration(
-              color: cs.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Column(
-              children: [
-                Row(
-                  children: [
+    return Column(
+      children: [
+        // ---------- Block 1: timeline lớn, tổng giờ bên dưới ----------
+        Container(
+          margin: const EdgeInsets.fromLTRB(_margin, 4, _margin, 0),
+          padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+          decoration: BoxDecoration(
+            color: cardColor,
+            borderRadius: BorderRadius.circular(_radius),
+          ),
+          child: Column(
+            children: [
+              SizedBox(
+                height: 170,
+                width: double.infinity,
+                child: CustomPaint(
+                  painter: TimelinePainter(
+                    events: events,
+                    now: _now,
+                    textColor: cs.onSurface,
+                    gridColor: cs.outlineVariant,
+                    trackColor: cs.surfaceContainerHigh,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              // Tổng giờ: chỉ số, màu = màu tiến trình (Làm việc, Thiết kế, CNC)
+              Row(
+                children: [
+                  for (final p in ProcessType.values)
                     Expanded(
                       child: Text(
-                        _dayTitle(widget.controller.day),
-                        style: tt.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w700),
+                        hhmm(summary.of(p)),
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                          color: _readable(p.color, brightness),
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
                       ),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    for (final p in ProcessType.values)
-                      Expanded(child: _total(p, summary.of(p), cs)),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                SizedBox(
-                  height: 104,
-                  width: double.infinity,
-                  child: CustomPaint(
-                    painter: TimelinePainter(
-                      events: events,
-                      now: _now,
-                      textColor: cs.onSurface,
-                      gridColor: cs.outlineVariant,
-                      trackColor: cs.surfaceContainerHigh,
+                ],
+              ),
+            ],
+          ),
+        ),
+
+        // ---------- Block 2: bảng nút 2 hàng x 3 cột (gọn) ----------
+        Padding(
+          padding: const EdgeInsets.fromLTRB(_margin, 8, _margin, 0),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Expanded(child: _startButton(Trigger.workStart)),
+                  const SizedBox(width: 6),
+                  Expanded(child: _startButton(Trigger.designStart)),
+                  const SizedBox(width: 6),
+                  Expanded(child: _startButton(Trigger.cncStart)),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Expanded(child: _endButton(Trigger.workEnd, 'Kết thúc')),
+                  const SizedBox(width: 6),
+                  Expanded(child: _endButton(Trigger.designEnd, 'Kết thúc')),
+                  const SizedBox(width: 6),
+                  // Ô thứ 6: chia đôi cho trigger 6 và 7
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: _endButton(
+                            Trigger.cncEnd,
+                            'Kết thúc',
+                            bottom: 'tại máy',
+                          ),
+                        ),
+                        const SizedBox(width: 3),
+                        Expanded(
+                          child: _endButton(
+                            Trigger.cncConfirm,
+                            'Xác nhận',
+                            bottom: 'tại bàn',
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
+            ],
           ),
+        ),
 
-          // ---------- Block 2: bảng nút 2 hàng x 3 cột ----------
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+        // ---------- Block 3: card lịch sử ----------
+        Expanded(
+          child: Container(
+            margin: const EdgeInsets.fromLTRB(_margin, 8, _margin, 4),
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              color: cardColor,
+              borderRadius: BorderRadius.circular(_radius),
+            ),
             child: Column(
               children: [
-                Row(
-                  children: [
-                    Expanded(child: _startButton(Trigger.workStart)),
-                    const SizedBox(width: 8),
-                    Expanded(child: _startButton(Trigger.designStart)),
-                    const SizedBox(width: 8),
-                    Expanded(child: _startButton(Trigger.cncStart)),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(child: _endButton(Trigger.workEnd, 'Kết thúc')),
-                    const SizedBox(width: 8),
-                    Expanded(child: _endButton(Trigger.designEnd, 'Kết thúc')),
-                    const SizedBox(width: 8),
-                    // Ô thứ 6: chia đôi cho trigger 6 và 7
-                    Expanded(
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: _endButton(
-                              Trigger.cncEnd,
-                              'Kết thúc',
-                              bottom: 'tại máy',
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: _endButton(
-                              Trigger.cncConfirm,
-                              'Xác nhận',
-                              bottom: 'tại bàn',
-                            ),
-                          ),
-                        ],
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 10, 14, 2),
+                  child: Row(
+                    children: [
+                      Text(
+                        'Lịch sử hôm nay',
+                        style:
+                            tt.titleSmall?.copyWith(fontWeight: FontWeight.w700),
                       ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-
-          // ---------- Block 3: lịch sử ----------
-          Padding(
-            padding: const EdgeInsets.fromLTRB(18, 10, 18, 2),
-            child: Row(
-              children: [
-                Text(
-                  'Lịch sử hôm nay',
-                  style: tt.titleSmall?.copyWith(color: cs.onSurfaceVariant),
-                ),
-                const Spacer(),
-                Text(
-                  '${events.length} mốc',
-                  style: tt.labelMedium?.copyWith(color: cs.onSurfaceVariant),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: rows.isEmpty
-                ? Center(
-                    child: Text(
-                      'Chưa có sự kiện hôm nay',
-                      style: tt.bodyLarge?.copyWith(color: cs.onSurfaceVariant),
-                    ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    itemCount: rows.length,
-                    itemExtent: 58,
-                    itemBuilder: (context, i) =>
-                        _EventTile(row: rows[i], background: cs.surface),
+                      const Spacer(),
+                      Text(
+                        '${events.length} mốc',
+                        style: tt.labelMedium
+                            ?.copyWith(color: cs.onSurfaceVariant),
+                      ),
+                    ],
                   ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _total(ProcessType p, Duration d, ColorScheme cs) {
-    return FittedBox(
-      fit: BoxFit.scaleDown,
-      alignment: Alignment.centerLeft,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          CircleAvatar(radius: 4, backgroundColor: p.color),
-          const SizedBox(width: 6),
-          Text(
-            '${p.label} ',
-            style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
-          ),
-          Text(
-            hhmm(d),
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-              fontFeatures: [FontFeature.tabularFigures()],
+                ),
+                Expanded(
+                  child: rows.isEmpty
+                      ? Center(
+                          child: Text(
+                            'Chưa có sự kiện hôm nay',
+                            style: tt.bodyMedium
+                                ?.copyWith(color: cs.onSurfaceVariant),
+                          ),
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          itemCount: rows.length,
+                          itemExtent: 48,
+                          itemBuilder: (context, i) => _EventTile(
+                            row: rows[i],
+                            background: cardColor,
+                          ),
+                        ),
+                ),
+              ],
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
-  Widget _caption(String top, String bottom, {double bottomSize = 17}) {
+  Widget _caption(String top, String bottom, {double bottomSize = 15}) {
     return FittedBox(
       fit: BoxFit.scaleDown,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(top, style: const TextStyle(fontSize: 12, height: 1.1)),
+          Text(top, style: const TextStyle(fontSize: 11, height: 1.1)),
           Text(
             bottom,
             style: TextStyle(
               fontSize: bottomSize,
               fontWeight: FontWeight.w700,
-              height: 1.2,
+              height: 1.15,
             ),
           ),
         ],
@@ -272,48 +283,39 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  /// Hàng 1: nút đặc màu tiến trình.
+  ButtonStyle _solid(Color bg, {double hPad = 4}) => FilledButton.styleFrom(
+        backgroundColor: bg,
+        foregroundColor: _onColor(bg),
+        padding: EdgeInsets.symmetric(horizontal: hPad),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(_buttonRadius),
+        ),
+      );
+
+  /// Hàng 1: nút đặc, màu tiến trình.
   Widget _startButton(Trigger t) {
     final p = t.process;
-    final fg = ThemeData.estimateBrightnessForColor(p.color) == Brightness.dark
-        ? Colors.white
-        : Colors.black87;
     return SizedBox(
-      height: 62,
+      height: _buttonHeight,
       child: FilledButton(
-        style: FilledButton.styleFrom(
-          backgroundColor: p.color,
-          foregroundColor: fg,
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        ),
+        style: _solid(p.color),
         onPressed: () => _press(t),
         child: _caption(p.label, 'Bắt đầu'),
       ),
     );
   }
 
-  /// Hàng 2: nút viền màu tiến trình, nền nhạt.
+  /// Hàng 2: nút đặc, cùng tông màu tiến trình nhưng đậm hơn (không viền).
   Widget _endButton(Trigger t, String top, {String? bottom}) {
-    final cs = Theme.of(context).colorScheme;
     final p = t.process;
     final split = bottom != null;
     return SizedBox(
-      height: 62,
-      child: OutlinedButton(
-        style: OutlinedButton.styleFrom(
-          backgroundColor: Color.alphaBlend(p.color.withAlpha(46), cs.surface),
-          foregroundColor: cs.onSurface,
-          side: BorderSide(color: p.color, width: 1.5),
-          padding: EdgeInsets.symmetric(horizontal: split ? 2 : 4),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(split ? 12 : 16),
-          ),
-        ),
+      height: _buttonHeight,
+      child: FilledButton(
+        style: _solid(_shade(p.color, -0.14), hPad: split ? 2 : 4),
         onPressed: () => _press(t),
         child: split
-            ? _caption(top, bottom, bottomSize: 14)
+            ? _caption(top, bottom, bottomSize: 12)
             : _caption(p.label, top),
       ),
     );
@@ -329,7 +331,6 @@ class _EventTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final tt = Theme.of(context).textTheme;
     return CustomPaint(
       painter: LanePainter(row, background),
       child: Padding(
@@ -346,9 +347,9 @@ class _EventTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  hms(row.event.time),
+                  hm(row.event.time),
                   style: const TextStyle(
-                    fontSize: 20,
+                    fontSize: 18,
                     fontWeight: FontWeight.w700,
                     height: 1.1,
                     fontFeatures: [FontFeature.tabularFigures()],
@@ -358,8 +359,8 @@ class _EventTile extends StatelessWidget {
                   Text(
                     'chạy ${hhmm(row.duration!)}',
                     style: TextStyle(
-                      fontSize: 12,
-                      height: 1.2,
+                      fontSize: 11,
+                      height: 1.15,
                       color: cs.onSurfaceVariant,
                     ),
                   ),
@@ -371,8 +372,11 @@ class _EventTile extends StatelessWidget {
                 row.event.trigger.label,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: tt.bodyLarge
-                    ?.copyWith(fontSize: 16, fontWeight: FontWeight.w500),
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  height: 1.2,
+                ),
               ),
             ),
           ],
