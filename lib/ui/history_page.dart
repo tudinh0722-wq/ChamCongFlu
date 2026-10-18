@@ -82,7 +82,7 @@ class _HistoryPageState extends State<HistoryPage> {
           title: Text(event == null ? 'Thêm sự kiện' : 'Sửa sự kiện'),
           content: Column(mainAxisSize: MainAxisSize.min, children: [
             DropdownButtonFormField<Trigger>(
-              value: trigger,
+              initialValue: trigger,
               isExpanded: true,
               decoration: const InputDecoration(labelText: 'Sự kiện'),
               items: Trigger.values.map((t) => DropdownMenuItem(value: t, child: Text(t.label))).toList(),
