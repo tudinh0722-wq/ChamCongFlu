@@ -24,12 +24,25 @@ class _HistoryPageState extends State<HistoryPage> {
   @override
   void initState() {
     super.initState();
+    // Trang được giữ sống khi vuốt đi: tự cập nhật khi Hôm nay có sự kiện mới.
+    widget.controller.addListener(_onTodayChanged);
     _load();
   }
 
-  Future<void> _load() async {
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onTodayChanged);
+    super.dispose();
+  }
+
+  void _onTodayChanged() {
+    if (mounted && sameDay(_day, DateTime.now())) _load(quiet: true);
+  }
+
+  /// [quiet] = true: nạp lại không hiện vòng xoay (khi cập nhật nền).
+  Future<void> _load({bool quiet = false}) async {
     if (!mounted) return;
-    setState(() => _loading = true);
+    if (!quiet) setState(() => _loading = true);
     try {
       final events = await widget.repository.eventsBetween(_day, nextDay(_day));
       if (mounted) setState(() { _events = events; _loading = false; });
@@ -117,7 +130,7 @@ class _HistoryPageState extends State<HistoryPage> {
       }
       await widget.controller.load();
       if (!mounted) return;
-      await _load();
+      await _load(quiet: true);
       if (mounted) _message('Đã lưu sự kiện.');
     } catch (e) {
       _message('Không lưu được sự kiện: $e', error: true);
@@ -140,7 +153,7 @@ class _HistoryPageState extends State<HistoryPage> {
     await widget.repository.deleteEvent(event.id);
     await widget.controller.load();
     if (!mounted) return;
-    await _load();
+    await _load(quiet: true);
   }
 
   @override
