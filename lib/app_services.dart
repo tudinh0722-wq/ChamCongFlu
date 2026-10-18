@@ -6,7 +6,6 @@ import 'package:sqflite/sqflite.dart';
 import 'data/app_database.dart';
 import 'data/repository.dart';
 import 'domain/day_controller.dart';
-import 'domain/trigger.dart';
 import 'nfc/nfc_service.dart';
 
 /// Vòng đời dùng chung của database, controller và NFC.
