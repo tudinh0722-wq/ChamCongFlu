@@ -48,11 +48,11 @@ class TimelinePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    const left = 56.0;
+    const left = 62.0;
     const right = 6.0;
-    const top = 2.0;
-    const axisH = 18.0;
-    const gap = 6.0;
+    const top = 4.0;
+    const axisH = 22.0;
+    const gap = 8.0;
 
     final (startHour, endHour) = hourRange(events, now);
     final plotW = size.width - left - right;
@@ -74,29 +74,30 @@ class TimelinePainter extends CustomPainter {
       canvas.drawRRect(
         RRect.fromRectAndRadius(
           Rect.fromLTRB(left, y + gap / 2, left + plotW, y + rowH - gap / 2),
-          const Radius.circular(6),
+          const Radius.circular(8),
         ),
         track,
       );
     }
 
-    // Vạch giờ + nhãn giờ
+    // Vạch giờ + nhãn giờ (nhãn rơi vào bội số của bước: 8, 10, 12... khi bước = 2)
     final hours = endHour - startHour;
     final step = hours <= 14 ? 1 : 2;
+    final firstLabel = ((startHour + step - 1) ~/ step) * step;
     final grid = Paint()
       ..color = gridColor
       ..strokeWidth = 1;
-    for (var h = startHour; h <= endHour; h += step) {
+    for (var h = firstLabel; h <= endHour; h += step) {
       final gx = left + plotW * (h - startHour) / hours;
       canvas.drawLine(Offset(gx, top), Offset(gx, plotBottom), grid);
-      _text(canvas, '$h', Offset(gx, plotBottom + 3), 10, center: true);
+      _text(canvas, '$h', Offset(gx, plotBottom + 4), 12, center: true);
     }
 
     // Thanh tiến trình
     for (var i = 0; i < ProcessType.values.length; i++) {
       final p = ProcessType.values[i];
       final y = top + rowH * i;
-      _text(canvas, p.label, Offset(4, y + (rowH - 13) / 2), 11);
+      _text(canvas, p.label, Offset(4, y + (rowH - 15) / 2), 13);
       final paint = Paint()..color = p.color;
       for (final it in buildIntervals(events, p)) {
         final a = x(it.start);
@@ -106,10 +107,10 @@ class TimelinePainter extends CustomPainter {
             Rect.fromLTRB(
               a,
               y + gap / 2,
-              b < a + 3 ? a + 3 : b,
+              b < a + 4 ? a + 4 : b,
               y + rowH - gap / 2,
             ),
-            const Radius.circular(5),
+            const Radius.circular(7),
           ),
           paint,
         );
@@ -121,9 +122,9 @@ class TimelinePainter extends CustomPainter {
       final nx = x(now);
       final red = Paint()
         ..color = Colors.red
-        ..strokeWidth = 1.5;
+        ..strokeWidth = 2;
       canvas.drawLine(Offset(nx, top), Offset(nx, plotBottom), red);
-      canvas.drawCircle(Offset(nx, top + 1), 3, red);
+      canvas.drawCircle(Offset(nx, top + 1), 3.5, red);
     }
   }
 
