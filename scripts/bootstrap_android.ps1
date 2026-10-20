@@ -1,10 +1,11 @@
 $ErrorActionPreference = "Stop"
 
-# Chạy từ thư mục gốc repo. An toàn để chạy lại nhiều lần (idempotent):
-# - tạo android/ nếu chưa có
-# - quyền NFC
-# - chạm thẻ khi app ở nền / màn hình khóa => Android mở app (intent-filter)
-# - MainActivity.kt: nhận UID từ intent và chuyển sang Dart
+# Run from the repository root. Safe to run many times (idempotent):
+# - creates android/ if missing
+# - NFC permission
+# - tag tapped while app is in background / screen locked => Android starts the app (intent-filter)
+# - MainActivity.kt: reads the tag UID from the intent and forwards it to Dart
+# (ASCII only on purpose: Windows PowerShell 5.1 reads UTF-8 without BOM as ANSI)
 
 if (-not (Test-Path "pubspec.yaml")) {
     throw "Run this script from the Flutter repository root (pubspec.yaml not found)."
@@ -39,7 +40,7 @@ if ($xml -notmatch 'android.permission.NFC') {
     $m = [regex]::Match($xml, '<manifest\b[^>]*>')
     $perm = $nl + '    <uses-permission android:name="android.permission.NFC" />'
     $xml = $xml.Insert($m.Index + $m.Length, $perm)
-    Write-Host "  + quyen NFC"
+    Write-Host "  + NFC permission"
 }
 
 if ($xml -notmatch 'android.hardware.nfc') {
@@ -48,7 +49,7 @@ if ($xml -notmatch 'android.hardware.nfc') {
     Write-Host "  + uses-feature NFC"
 }
 
-# Chạm thẻ NTAG (NfcA) khi app không ở foreground => mở MainActivity.
+# NTAG (NfcA) tapped while the app is not in the foreground => start MainActivity.
 if ($xml -notmatch 'android.nfc.action.TECH_DISCOVERED') {
     $filter = @'
             <intent-filter>
@@ -60,13 +61,14 @@ if ($xml -notmatch 'android.nfc.action.TECH_DISCOVERED') {
                 android:resource="@xml/nfc_tech_filter" />
 
 '@
+    $filter = $filter.Replace("`r`n", "`n").Replace("`n", $nl)
     $idx = $xml.IndexOf('</activity>')
-    if ($idx -lt 0) { throw "Khong tim thay </activity> trong AndroidManifest.xml" }
-    $xml = $xml.Insert($idx, $filter.Replace("`n", $nl))
+    if ($idx -lt 0) { throw "</activity> not found in AndroidManifest.xml" }
+    $xml = $xml.Insert($idx, $filter)
     Write-Host "  + intent-filter TECH_DISCOVERED"
 }
 
-# Hiện trên màn hình khóa và bật màn hình khi được thẻ mở app.
+# Show over the lock screen and turn the screen on when a tag starts the app.
 if ($xml -notmatch 'android:showWhenLocked') {
     $attrs = 'android:name=".MainActivity"' + $nl + '            android:showWhenLocked="true"' + $nl + '            android:turnScreenOn="true"'
     $xml = $xml.Replace('android:name=".MainActivity"', $attrs)
@@ -92,13 +94,13 @@ Write-Host "  + res/xml/nfc_tech_filter.xml"
 # ------------------------------------------------------------ MainActivity
 $mainKt = Get-ChildItem -Path (Join-Path $root "android/app/src/main") -Recurse -Filter "MainActivity.kt" | Select-Object -First 1
 if (-not $mainKt) {
-    throw "Khong thay MainActivity.kt (can template Kotlin cua Flutter)."
+    throw "MainActivity.kt not found (Flutter Kotlin template required)."
 }
 $existing = [System.IO.File]::ReadAllText($mainKt.FullName)
 if ($existing -match '(?m)^\s*package\s+([\w\.]+)') {
     $pkg = $Matches[1]
 } else {
-    throw "Khong doc duoc package tu $($mainKt.FullName)"
+    throw "Cannot read the package name from $($mainKt.FullName)"
 }
 
 $kotlin = @'
@@ -114,9 +116,10 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 /**
- * Nhận intent khi chạm thẻ NFC lúc app không ở foreground (màn hình khóa,
- * app khác, màn hình chính) và chuyển UID sang Dart qua MethodChannel.
- * File này được scripts/bootstrap_android.ps1 ghi đè mỗi lần chạy.
+ * Receives the NFC intent when a tag is tapped while the app is not in the
+ * foreground (locked screen, another app, home screen) and forwards the UID
+ * to Dart through a MethodChannel.
+ * Overwritten by scripts/bootstrap_android.ps1 on every run.
  */
 class MainActivity : FlutterActivity() {
     private var channel: MethodChannel? = null
@@ -152,7 +155,7 @@ class MainActivity : FlutterActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         val uid = takeUid(intent) ?: return
-        // resumed == false: app đang ở nền / bị thẻ đưa lên từ màn hình khóa.
+        // resumed == false: app was in the background / brought up by the tag.
         channel?.invokeMethod("onTag", mapOf("uid" to uid, "background" to !resumed))
     }
 
@@ -180,7 +183,7 @@ class MainActivity : FlutterActivity() {
             @Suppress("DEPRECATION")
             intent.getParcelableExtra(NfcAdapter.EXTRA_TAG)
         }
-        // Tránh xử lý lại cùng một intent khi activity bị tạo lại.
+        // Do not process the same intent twice if the activity is recreated.
         intent.action = Intent.ACTION_MAIN
         val id = tag?.id ?: return null
         return id.joinToString(":") { "%02X".format(it) }
