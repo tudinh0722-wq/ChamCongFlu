@@ -1,16 +1,23 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:sqflite/sqflite.dart';
 
 import 'data/app_database.dart';
 import 'data/repository.dart';
 import 'domain/day_controller.dart';
+import 'nfc/nfc_launch.dart';
 import 'nfc/nfc_service.dart';
 
 /// Vòng đời dùng chung của database, controller và NFC.
-class AppServices extends ChangeNotifier {
+class AppServices extends ChangeNotifier with WidgetsBindingObserver {
   AppServices._(this.database, this.repository, this.dayController, this.nfc);
+
+  /// Chạm thẻ khi app ở nền (màn hình khóa, app khác, màn hình chính): sau khi
+  /// ghi sự kiện và hiện thông báo, tự đưa app về nền để quay lại việc đang làm.
+  static const returnToPreviousApp = true;
+  static const _returnDelay = Duration(milliseconds: 1600);
 
   final Database database;
   final Repository repository;
@@ -34,14 +41,47 @@ class AppServices extends ChangeNotifier {
     final nfc = NfcService();
     final services = AppServices._(db, repo, controller, nfc);
     await controller.load();
-    final available = await nfc.isAvailable();
-    if (available) {
-      await nfc.start((uid) {
-        final next = services._uidQueue.then((_) => services._handleUid(uid));
-        services._uidQueue = next.catchError((_) {});
-      });
-    }
+
+    WidgetsBinding.instance.addObserver(services);
+    await services._startNfc();
+
+    // Thẻ chạm khi app không ở foreground: Android mở app bằng intent NFC,
+    // MainActivity chuyển UID sang Dart qua MethodChannel.
+    NfcLaunchChannel.listen(
+      (tap) => services._enqueue(tap.uid, background: tap.background),
+    );
+    final initial = await NfcLaunchChannel.takeInitialTap();
+    if (initial != null) services._enqueue(initial.uid, background: true);
     return services;
+  }
+
+  /// Phiên quét foreground chỉ sống khi app đang mở: dừng khi ra nền và bật
+  /// lại khi quay về (nếu không, quét sẽ im lặng sau lần thoát đầu tiên).
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_startNfc());
+    } else if (state == AppLifecycleState.paused) {
+      unawaited(_stopNfc());
+    }
+  }
+
+  Future<void> _startNfc() async {
+    if (await nfc.isAvailable()) {
+      await nfc.start((uid) => _enqueue(uid));
+    }
+    notifyListeners();
+  }
+
+  Future<void> _stopNfc() async {
+    await nfc.stop();
+    notifyListeners();
+  }
+
+  void _enqueue(String uid, {bool background = false}) {
+    final next =
+        _uidQueue.then((_) => _handleUid(uid, background: background));
+    _uidQueue = next.catchError((_) {});
   }
 
   /// Chờ chạm thẻ tiếp theo để gán UID cho tag đã chọn.
@@ -56,7 +96,7 @@ class AppServices extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _handleUid(String uid) async {
+  Future<void> _handleUid(String uid, {required bool background}) async {
     final now = DateTime.now();
     if (_lastUid == uid &&
         _lastUidAt != null &&
@@ -83,21 +123,25 @@ class AppServices extends ChangeNotifier {
       final tag = await repository.tagByUid(uid);
       if (tag == null) {
         onMessage?.call('Thẻ $uid chưa được gán. Mở tab Thẻ để gán.', error: true);
-        return;
-      }
-      if (!tag.active) {
+      } else if (!tag.active) {
         onMessage?.call('Thẻ ${tag.name} đang tắt.', error: true);
-        return;
+      } else {
+        final result = await dayController.press(tag.trigger, tagId: tag.id);
+        onMessage?.call(result.message, error: !result.ok);
       }
-      final result = await dayController.press(tag.trigger, tagId: tag.id);
-      onMessage?.call(result.message, error: !result.ok);
     } catch (e) {
       onMessage?.call('Lỗi khi xử lý thẻ NFC: $e', error: true);
+    } finally {
+      if (background && returnToPreviousApp) {
+        // Chờ người dùng kịp đọc thông báo rồi mới quay lại.
+        Future<void>.delayed(_returnDelay, NfcLaunchChannel.moveToBack);
+      }
     }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     unawaited(nfc.stop());
     dayController.dispose();
     unawaited(database.close());
