@@ -5,14 +5,21 @@ import 'package:flutter/widgets.dart';
 import 'package:sqflite/sqflite.dart';
 
 import 'data/app_database.dart';
+import 'data/backup_service.dart';
 import 'data/repository.dart';
 import 'domain/day_controller.dart';
 import 'nfc/nfc_launch.dart';
 import 'nfc/nfc_service.dart';
 
-/// Vòng đời dùng chung của database, controller và NFC.
+/// Vòng đời dùng chung của database, controller, NFC và sao lưu.
 class AppServices extends ChangeNotifier with WidgetsBindingObserver {
-  AppServices._(this.database, this.repository, this.dayController, this.nfc);
+  AppServices._(
+    this.database,
+    this.repository,
+    this.dayController,
+    this.nfc,
+    this.backup,
+  );
 
   /// Chạm thẻ khi app ở nền (màn hình khóa, app khác, màn hình chính): sau khi
   /// ghi sự kiện và hiện thông báo, tự đưa app về nền để quay lại việc đang làm.
@@ -23,6 +30,7 @@ class AppServices extends ChangeNotifier with WidgetsBindingObserver {
   final Repository repository;
   final DayController dayController;
   final NfcService nfc;
+  final BackupService backup;
 
   void Function(String message, {bool error})? onMessage;
   String? _assigningTagId;
@@ -39,8 +47,14 @@ class AppServices extends ChangeNotifier with WidgetsBindingObserver {
     final repo = Repository(db);
     final controller = DayController(repo);
     final nfc = NfcService();
-    final services = AppServices._(db, repo, controller, nfc);
+    final backup = BackupService(db);
+    final services = AppServices._(db, repo, controller, nfc, backup);
+
+    // Mỗi thay đổi dữ liệu tự lên lịch sao lưu ra thư mục ngoài app.
+    repo.onChanged = backup.schedule;
+
     await controller.load();
+    await backup.refreshFolder();
 
     WidgetsBinding.instance.addObserver(services);
     await services._startNfc();
@@ -54,6 +68,28 @@ class AppServices extends ChangeNotifier with WidgetsBindingObserver {
     if (initial != null) services._enqueue(initial.uid, background: true);
     return services;
   }
+
+  // ------------------------------------------------------------ Sao lưu
+
+  /// Bản sao lưu trong thư mục đã chọn (null nếu chưa có hoặc không đọc được).
+  Future<FoundBackup?> findBackup() async {
+    try {
+      return await backup.latestBackup();
+    } catch (e) {
+      onMessage?.call('Không đọc được thư mục sao lưu: $e', error: true);
+      return null;
+    }
+  }
+
+  /// Nhập bản sao lưu, nạp lại Hôm nay, báo cho các trang (Thẻ...) làm mới.
+  Future<int> restoreBackup(FoundBackup found) async {
+    final added = await backup.restore(found);
+    await dayController.load();
+    notifyListeners();
+    return added;
+  }
+
+  // ---------------------------------------------------------------- NFC
 
   /// Phiên quét foreground chỉ sống khi app đang mở: dừng khi ra nền và bật
   /// lại khi quay về (nếu không, quét sẽ im lặng sau lần thoát đầu tiên).
@@ -143,6 +179,7 @@ class AppServices extends ChangeNotifier with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     unawaited(nfc.stop());
+    backup.dispose();
     dayController.dispose();
     unawaited(database.close());
     super.dispose();
