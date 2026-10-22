@@ -32,6 +32,10 @@ class AppServices extends ChangeNotifier with WidgetsBindingObserver {
   final NfcService nfc;
   final BackupService backup;
 
+  /// true nếu app vừa được khởi chạy bởi một lần chạm thẻ (không nên hiện
+  /// hộp thoại nhắc sao lưu).
+  bool launchedByTag = false;
+
   void Function(String message, {bool error})? onMessage;
   String? _assigningTagId;
   String? _lastUid;
@@ -65,7 +69,10 @@ class AppServices extends ChangeNotifier with WidgetsBindingObserver {
       (tap) => services._enqueue(tap.uid, background: tap.background),
     );
     final initial = await NfcLaunchChannel.takeInitialTap();
-    if (initial != null) services._enqueue(initial.uid, background: true);
+    if (initial != null) {
+      services.launchedByTag = true;
+      services._enqueue(initial.uid, background: true);
+    }
     return services;
   }
 
