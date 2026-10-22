@@ -9,6 +9,12 @@ class Repository {
 
   final Database _db;
 
+  /// Gọi sau mỗi thay đổi dữ liệu (thêm/sửa/xóa sự kiện, đổi thẻ).
+  /// AppServices nối vào đây để tự sao lưu ra thư mục ngoài app.
+  void Function()? onChanged;
+
+  void _changed() => onChanged?.call();
+
   // ---------- Event ----------
 
   /// Sự kiện trong khoảng [from, to), sắp theo giờ.
@@ -43,6 +49,7 @@ class Repository {
       'trigger_type': trigger.name,
       'ts': time.millisecondsSinceEpoch,
     });
+    _changed();
     return TriggerEvent(id: id, trigger: trigger, time: time, tagId: tagId);
   }
 
@@ -53,10 +60,12 @@ class Repository {
       where: 'id = ?',
       whereArgs: [id],
     );
+    _changed();
   }
 
   Future<void> deleteEvent(int id) async {
     await _db.delete('event', where: 'id = ?', whereArgs: [id]);
+    _changed();
   }
 
   // ---------- Tag ----------
@@ -93,18 +102,22 @@ class Repository {
       await txn.update('tag', {'uid': uid},
           where: 'id = ?', whereArgs: [tagId]);
     });
+    _changed();
   }
 
   Future<void> clearTagUid(String tagId) async {
     await _db.update('tag', {'uid': null}, where: 'id = ?', whereArgs: [tagId]);
+    _changed();
   }
 
   Future<void> renameTag(String tagId, String name) async {
     await _db.update('tag', {'name': name}, where: 'id = ?', whereArgs: [tagId]);
+    _changed();
   }
 
   Future<void> setTagActive(String tagId, bool active) async {
     await _db.update('tag', {'active': active ? 1 : 0},
         where: 'id = ?', whereArgs: [tagId]);
+    _changed();
   }
 }
