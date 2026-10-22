@@ -26,7 +26,7 @@ Tóm tắt: A (xác nhận cái đang có) -> B (không mất dữ liệu) -> C 
   3. Nếu app bị gỡ: tìm nguyên nhân (khóa debug khác với APK cài từ GitHub Actions? `applicationId` đổi?) rồi sửa.
 - **Xong khi:** chấm một sự kiện, Run lại, sự kiện vẫn còn.
 - **Ai làm:** bạn đo, hai bên cùng sửa.
-- **Ghi chú:** 7 thẻ đã có UID mặc định trong code, nhưng lịch sử sự kiện vẫn mất nếu app bị gỡ.
+- **Ghi chú:** 7 thẻ đã có UID mặc định trong code. Lịch sử sự kiện được bảo vệ ở M6 (sao lưu ra ngoài app); M2 vẫn cần làm để không phải khôi phục sau mỗi lần Run.
 
 ### M3. Kiểm tra 7 thẻ
 - **Mục tiêu:** mỗi thẻ vật lý tạo đúng sự kiện.
@@ -51,12 +51,18 @@ Tóm tắt: A (xác nhận cái đang có) -> B (không mất dữ liệu) -> C 
 
 ## Giai đoạn B — Dữ liệu không bị mất
 
-### M6. Xuất và nhập dữ liệu ra file
-- **Mục tiêu:** có bản sao dữ liệu ngoài điện thoại.
-- **Việc cần làm:** nút xuất toàn bộ sự kiện (CSV hoặc JSON) ra thư mục tải về / chia sẻ; nút nhập lại từ file; nhập thì bỏ qua sự kiện trùng.
-- **Xong khi:** xuất, gỡ app, cài lại, nhập, thấy đủ lịch sử.
-- **Ai làm:** tôi viết, bạn thử.
-- **Phụ thuộc:** M2.
+### M6. Sao lưu tự động ra thư mục ngoài app (cách B: chọn thư mục)  — đã viết, chờ kiểm chứng
+- **Mục tiêu:** gỡ rồi cài lại app, chọn lại thư mục sao lưu là lấy lại được toàn bộ lịch sử và thẻ.
+- **Cách làm:** app tự ghi file JSON (luân phiên 2 file) vào thư mục bạn chọn bằng Storage Access Framework; không cần quyền lưu trữ. Android thu hồi quyền khi gỡ app, nên **mỗi lần cài lại phải chọn lại thư mục một lần**, app tìm thấy bản sao lưu và hỏi khôi phục. Bản sao lưu có dữ liệu không bao giờ bị ghi đè bằng database trống.
+- **Việc cần làm (kiểm chứng):**
+  1. `git pull`, chạy lại `scripts\bootstrap_android.ps1`, `flutter run`.
+  2. Bấm icon sao lưu trên AppBar, chọn thư mục (ví dụ `Documents/ChamCong`).
+  3. Ghi vài sự kiện, đợi vài giây, mở thư mục bằng app Tệp xem có 1 hoặc 2 file `chamcong_backup_*.json`.
+  4. Gỡ app, cài lại, mở app, chọn lại đúng thư mục, bấm Khôi phục.
+- **Xong khi:** sau bước 4 thấy đủ lịch sử và đủ thẻ; thử thêm một lần mà **không** bấm Khôi phục ngay, ghi 1 sự kiện, xác nhận bản sao lưu cũ không bị mất (nhờ 2 file luân phiên).
+- **Ai làm:** tôi đã viết, bạn thử và báo lỗi.
+- **Phụ thuộc:** M1.
+- **Còn thiếu:** xuất CSV để mở bằng Excel (chưa làm).
 
 ### M7. Màn tổng kết cuối ngày
 - **Mục tiêu:** có chỗ xem một lần số giờ để nhập lên hệ thống xưởng.
