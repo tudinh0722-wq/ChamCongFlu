@@ -1,14 +1,14 @@
+import 'dart:typed_data';
 import 'package:nfc_manager/nfc_manager.dart';
 import 'package:nfc_manager/nfc_manager_android.dart';
+import 'package:ndef_record/ndef_record.dart';
 
 /// Chuyển bytes UID sang chuỗi hex dạng 53:27:B3:B1:02:00:01.
 String uidToHex(List<int> bytes) => bytes
     .map((b) => b.toRadixString(16).padLeft(2, '0').toUpperCase())
     .join(':');
 
-/// Đọc UID thẻ NFC (NTAG213) bằng nfc_manager 4.x.
-/// UID lấy từ `Tag#id` của Android, không phụ thuộc loại công nghệ thẻ.
-/// Chỉ quét khi app đang mở (foreground).
+/// Đọc/Ghi thẻ NFC.
 class NfcService {
   bool _running = false;
 
@@ -46,8 +46,32 @@ class NfcService {
     _running = false;
     try {
       await NfcManager.instance.stopSession();
-    } catch (_) {
-      // phiên đã đóng
-    }
+    } catch (_) {}
+  }
+
+  /// Ghi MIME record để Android tự kích hoạt app.
+  Future<void> writeCheckInRecord(String mimeData) async {
+    await NfcManager.instance.stopSession();
+    await NfcManager.instance.startSession(
+      pollingOptions: {NfcPollingOption.iso14443},
+      onDiscovered: (NfcTag tag) async {
+        try {
+          final ndef = NdefAndroid.from(tag);
+          if (ndef == null) {
+            throw Exception("Thẻ không hỗ trợ NDEF");
+          }
+          final record = NdefRecord(
+            typeNameFormat: TypeNameFormat.media,
+            type: Uint8List.fromList('application/vnd.chamcongflu.checkin'.codeUnits),
+            identifier: Uint8List(0),
+            payload: Uint8List.fromList(mimeData.codeUnits),
+          );
+          await ndef.writeNdefMessage(NdefMessage(records: [record]));
+          await NfcManager.instance.stopSession();
+        } catch (e) {
+          await NfcManager.instance.stopSession();
+        }
+      },
+    );
   }
 }
