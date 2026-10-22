@@ -49,9 +49,23 @@
 - Giới hạn: màn hình **tắt hẳn** thì NFC của điện thoại không đọc thẻ. Khi khóa màn hình (màn hình sáng) trên Samsung cần tắt "Yêu cầu mở khóa thiết bị để dùng NFC" trong Cài đặt > Kết nối > NFC và thanh toán không tiếp xúc. Nếu có app khác cũng nhận thẻ NTAG, Android có thể hiện hộp chọn app.
 - [ ] Cần bạn: `git pull`, chạy lại `scripts\bootstrap_android.ps1`, rồi `flutter run`; thử 4 tình huống (đang mở app, app khác, màn hình chính, khóa màn hình sáng).
 
+## Sao lưu ra ngoài app — cách B: chọn thư mục (2026-10-22)
+
+Mục tiêu: gỡ/cài lại app mà vẫn lấy lại được toàn bộ lịch sử và thẻ. Dữ liệu trong database nằm trong "ngăn riêng" của app và bị Android xóa khi gỡ app, nên app tự ghi thêm một bản sao ra thư mục **do người dùng chọn** (ngoài app).
+
+- [x] `MainActivity.kt` (do `scripts/bootstrap_android.ps1` ghi): thêm kênh `chamcong/backup` dùng Storage Access Framework: chọn thư mục (`ACTION_OPEN_DOCUMENT_TREE`), giữ quyền lâu dài, đọc/ghi file trong thư mục đó. Không cần quyền lưu trữ nào trong manifest.
+- [x] `lib/data/backup_service.dart` (mới): xuất tags + events ra JSON; ghi **luân phiên 2 file** (`chamcong_backup_a.json`, `chamcong_backup_b.json`) để lỡ tắt app giữa lúc ghi vẫn còn file nguyên; khôi phục dùng file hợp lệ mới nhất; sự kiện trùng (cùng loại, cùng giờ) được bỏ qua.
+- [x] **Không ghi đè bản sao lưu có dữ liệu bằng database trống**: cài lại mà chưa khôi phục thì sao lưu tự bị chặn.
+- [x] `Repository.onChanged`: mỗi thêm/sửa/xóa sự kiện hay đổi thẻ tự lên lịch sao lưu 3 giây sau thay đổi cuối.
+- [x] `lib/ui/backup_sheet.dart` (mới): bảng sao lưu (chọn/đổi thư mục, sao lưu ngay, khôi phục); hộp thoại nhắc chọn thư mục khi mở app (không hiện nếu app vừa được thẻ NFC mở).
+- [x] `lib/main.dart`: icon sao lưu ở AppBar (xanh = đã chọn thư mục, màu khác = chưa).
+- Sau khi gỡ app, Android thu hồi quyền thư mục: **mỗi lần cài lại phải chọn lại thư mục một lần**, rồi app tìm thấy bản sao lưu và hỏi khôi phục.
+- Dữ liệu đã mất trước khi có tính năng này không lấy lại được.
+- [ ] Cần bạn: `git pull`, chạy lại `scripts\bootstrap_android.ps1` (bắt buộc, vì `MainActivity.kt` đổi), `flutter run`, rồi thử chuỗi: chọn thư mục, ghi vài sự kiện, đợi vài giây, gỡ app, cài lại, chọn lại thư mục, khôi phục.
+
 ## Còn cần làm trên máy phát triển
 - [ ] `flutter pub get`, `flutter analyze`, `flutter test`.
 - [ ] Chạy thử trên Galaxy S23 và xác nhận NFC thật.
 - [ ] `flutter build apk --debug`.
 
-Mã nguồn được chuyển từ nhánh `flutter-testable` của repo cũ. Các bản sửa nfc_manager 4.x, UI và NFC nền **chưa được biên dịch** ở môi trường viết; cần `flutter analyze` và chạy thật để xác nhận.
+Mã nguồn được chuyển từ nhánh `flutter-testable` của repo cũ. Các bản sửa nfc_manager 4.x, UI, NFC nền và sao lưu **chưa được biên dịch** ở môi trường viết; cần `flutter analyze` và chạy thật để xác nhận.
