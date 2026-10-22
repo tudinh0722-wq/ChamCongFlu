@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'app_services.dart';
+import 'ui/backup_sheet.dart';
 import 'ui/history_page.dart';
 import 'ui/home_page.dart';
 import 'ui/tags_page.dart';
@@ -104,6 +105,17 @@ class _MainShellState extends State<MainShell> {
   static const _pageTitles = ['', 'Lịch sử', 'Thẻ NFC'];
 
   @override
+  void initState() {
+    super.initState();
+    // Nhắc chọn thư mục sao lưu / khôi phục. Bỏ qua nếu app vừa được thẻ NFC
+    // khởi chạy (người dùng chỉ muốn ghi nhanh, không muốn gặp hộp thoại).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || widget.services.launchedByTag) return;
+      promptBackupOnStart(context, widget.services);
+    });
+  }
+
+  @override
   void dispose() {
     _pageController.dispose();
     super.dispose();
@@ -178,6 +190,22 @@ class _MainShellState extends State<MainShell> {
           ),
         ),
         actions: [
+          // Sao lưu ra thư mục ngoài app: màu chính = đã chọn thư mục,
+          // viền + màu khác = chưa có thư mục (dữ liệu sẽ mất khi gỡ app).
+          ListenableBuilder(
+            listenable: services.backup,
+            builder: (context, _) {
+              final ok = services.backup.hasFolder;
+              return IconButton(
+                tooltip: ok ? 'Sao lưu: đã bật' : 'Sao lưu: chưa chọn thư mục',
+                onPressed: () => showBackupSheet(context, services),
+                icon: Icon(
+                  ok ? Icons.cloud_done : Icons.cloud_off_outlined,
+                  color: ok ? cs.primary : cs.tertiary,
+                ),
+              );
+            },
+          ),
           // Trạng thái NFC của máy: bấm để xem giải thích.
           ListenableBuilder(
             listenable: services,
