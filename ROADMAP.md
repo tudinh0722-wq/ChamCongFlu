@@ -1,119 +1,91 @@
-# Lộ trình (milestone) từng bước
+# Roadmap — ChamCongFlu
 
-Cách đọc: mỗi bước có **Mục tiêu**, **Việc cần làm**, **Xong khi** (cách kiểm tra cụ thể) và **Ai làm**.
-Trạng thái ghi trong `PROGRESS.md`. Nguyên tắc: **chưa qua bước trước thì chưa làm bước sau**, vì phần lớn code hiện tại chưa được chạy thử trên máy thật.
+Roadmap đưa repo hiện tại đến trạng thái có thể dùng hằng ngày an toàn. Code có sẵn không đồng nghĩa tính năng đã được xác minh trên thiết bị. Chỉ đánh dấu hoàn tất khi có kết quả test/log thực tế.
 
-Tóm tắt: A (xác nhận cái đang có) -> B (không mất dữ liệu) -> C (dùng hằng ngày thoải mái) -> D (hoàn thiện).
+## M0 — Dựng lại môi trường từ GitHub
 
----
+**Mục tiêu:** clone sạch có thể tạo Android host và chạy trên Galaxy S23.
 
-## Giai đoạn A — Xác nhận cái đang có chạy thật
+- [ ] Clone/pull main; kiểm tra git status -sb.
+- [ ] Chạy flutter doctor và flutter pub get.
+- [ ] Chạy script từ thư mục gốc: powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap_android.ps1
+- [ ] Chạy flutter analyze, flutter test, flutter build apk --debug và flutter run.
 
-### M1. Nền tảng chạy được
-- **Mục tiêu:** code trên GitHub biên dịch, test qua, chạy được trên S23.
-- **Việc cần làm:**
-  1. `git pull`
-  2. `powershell -ExecutionPolicy Bypass -File scripts\bootstrap_android.ps1`
-  3. `flutter pub get`, `flutter analyze`, `flutter test`, `flutter run`
-- **Xong khi:** `flutter analyze` không lỗi, `flutter test` qua hết (13 ca), app mở được trên S23 và thấy 3 trang.
-- **Ai làm:** bạn chạy, gửi lỗi (nếu có) cho tôi sửa.
+**Đạt khi:** analyze/test/build thành công, app mở được và có đủ ba tab. Ghi số test thực tế, không dùng con số cũ.
 
-### M2. Hiểu và chặn lỗi mất dữ liệu mỗi lần Run
-- **Mục tiêu:** biết vì sao dữ liệu mất, để lịch sử sự kiện không còn bị xóa.
-- **Việc cần làm:**
-  1. Chạy `adb shell dumpsys package com.example.chamcong_v2 | findstr firstInstallTime` trước và sau một lần Run.
-  2. Xem cửa sổ Run có dòng `Uninstalling old version` không.
-  3. Nếu app bị gỡ: tìm nguyên nhân (khóa debug khác với APK cài từ GitHub Actions? `applicationId` đổi?) rồi sửa.
-- **Xong khi:** chấm một sự kiện, Run lại, sự kiện vẫn còn.
-- **Ai làm:** bạn đo, hai bên cùng sửa.
-- **Ghi chú:** 7 thẻ đã có UID mặc định trong code. Lịch sử sự kiện được bảo vệ ở M6 (sao lưu ra ngoài app); M2 vẫn cần làm để không phải khôi phục sau mỗi lần Run.
+**Lưu ý:** script tạo Android host nếu thiếu; nếu android/ đã tồn tại, script vá cấu hình và ghi đè MainActivity.kt. Sau đó kiểm tra git diff -- android.
 
-### M3. Kiểm tra 7 thẻ
-- **Mục tiêu:** mỗi thẻ vật lý tạo đúng sự kiện.
-- **Việc cần làm:** mở app, chạm lần lượt từng thẻ, đối chiếu sự kiện hiện ra với tên thẻ. TAG-001 đến TAG-005 đang là **giả định** về thứ tự.
-- **Xong khi:** 7 thẻ đều ghi đúng sự kiện. Thẻ nào sai thì sửa ở trang Thẻ (gán lại hoặc đổi sự kiện).
-- **Ai làm:** bạn.
+## M1 — Xác minh nghiệp vụ chấm công
 
-### M4. Chạm thẻ khi app ở nền
-- **Mục tiêu:** chạm thẻ khi không mở app vẫn ghi được.
-- **Việc cần làm:** thử 4 tình huống, mỗi tình huống chạm 1 thẻ: (a) đang mở app, (b) đang ở app khác, (c) ở màn hình chính, (d) khóa màn hình nhưng màn hình sáng (đã tắt "Yêu cầu mở khóa thiết bị để dùng NFC").
-- **Xong khi:** cả 4 tình huống ghi đúng sự kiện, không hiện hộp chọn app, app tự lùi về nền sau khoảng 1,6 giây.
-- **Ai làm:** bạn thử, tôi sửa theo kết quả (các điểm hay hỏng: hộp chọn app của Samsung, `MainActivity.kt`, intent-filter).
-- **Giới hạn đã biết:** màn hình tắt hẳn thì điện thoại không đọc được thẻ.
+- [ ] Xác nhận trigger 1–7 tương ứng đúng sự kiện.
+- [ ] Ba tiến trình làm việc, thiết kế, CNC chạy độc lập.
+- [ ] Chặn bắt đầu lại khi tiến trình đang chạy.
+- [ ] Kết thúc không có bắt đầu bị chặn trong luồng chấm công bình thường.
+- [ ] Nhiều lượt trong ngày cộng đúng; lượt đang chạy hôm nay tính đến hiện tại.
+- [ ] Sửa/xóa/thêm sự kiện ngày cũ cập nhật lịch sử, tổng thời lượng và cảnh báo.
+- [ ] Dữ liệu còn sau khi đóng/mở lại app.
 
-### M5. Kiểm tra giao diện trên máy thật
-- **Mục tiêu:** UI hôm nay, lịch sử, thẻ dùng thoải mái trên S23.
-- **Việc cần làm:** xem 3 block vừa màn hình không, chữ nút 6 và 7 có bị bé hoặc cắt không, thanh điều hướng nổi có che nội dung không, vuốt có nhầm với thao tác khác không.
-- **Xong khi:** bạn chấp nhận bố cục, hoặc liệt kê chỗ cần chỉnh để sửa một vòng.
-- **Ai làm:** bạn xem, tôi chỉnh.
+**Đạt khi:** kết quả từng ca khớp với dữ liệu và tổng thời lượng hiển thị.
 
----
+## M2 — Xác minh 7 thẻ NFC foreground
 
-## Giai đoạn B — Dữ liệu không bị mất
+- [ ] Đối chiếu từng thẻ vật lý với TAG-001…TAG-007.
+- [ ] UID chưa đăng ký không tạo sự kiện.
+- [ ] Tag inactive không tạo sự kiện.
+- [ ] Đọc lặp cùng UID trong 2 giây chỉ ghi một event.
+- [ ] Thay UID thẻ hỏng không đổi Tag ID; UID cũ không còn được nhận.
+- [ ] Một UID không được gán đồng thời cho hai tag.
 
-### M6. Sao lưu tự động ra thư mục ngoài app (cách B: chọn thư mục)  — đã viết, chờ kiểm chứng
-- **Mục tiêu:** gỡ rồi cài lại app, chọn lại thư mục sao lưu là lấy lại được toàn bộ lịch sử và thẻ.
-- **Cách làm:** app tự ghi file JSON (luân phiên 2 file) vào thư mục bạn chọn bằng Storage Access Framework; không cần quyền lưu trữ. Android thu hồi quyền khi gỡ app, nên **mỗi lần cài lại phải chọn lại thư mục một lần**, app tìm thấy bản sao lưu và hỏi khôi phục. Bản sao lưu có dữ liệu không bao giờ bị ghi đè bằng database trống.
-- **Việc cần làm (kiểm chứng):**
-  1. `git pull`, chạy lại `scripts\bootstrap_android.ps1`, `flutter run`.
-  2. Bấm icon sao lưu trên AppBar, chọn thư mục (ví dụ `Documents/ChamCong`).
-  3. Ghi vài sự kiện, đợi vài giây, mở thư mục bằng app Tệp xem có 1 hoặc 2 file `chamcong_backup_*.json`.
-  4. Gỡ app, cài lại, mở app, chọn lại đúng thư mục, bấm Khôi phục.
-- **Xong khi:** sau bước 4 thấy đủ lịch sử và đủ thẻ; thử thêm một lần mà **không** bấm Khôi phục ngay, ghi 1 sự kiện, xác nhận bản sao lưu cũ không bị mất (nhờ 2 file luân phiên).
-- **Ai làm:** tôi đã viết, bạn thử và báo lỗi.
-- **Phụ thuộc:** M1.
-- **Còn thiếu:** xuất CSV để mở bằng Excel (chưa làm).
+**Đạt khi:** đủ 7 thẻ tạo đúng trigger; các ca âm tính không ghi event.
 
-### M7. Màn tổng kết cuối ngày
-- **Mục tiêu:** có chỗ xem một lần số giờ để nhập lên hệ thống xưởng.
-- **Việc cần làm:** hiện tổng giờ làm việc, thiết kế, CNC của ngày (đã có ở card timeline và lịch sử) trên một màn gọn; thêm số lần CNC chạy; nút sao chép văn bản.
-- **Xong khi:** bạn nhập đúng số liệu lên hệ thống chỉ bằng cách đọc từ màn này.
-- **Ai làm:** tôi viết, bạn xác nhận định dạng số liệu hệ thống xưởng cần.
+## M3 — NFC khi app nền
 
----
+**Đây là milestone rủi ro cao. Source/script có phần triển khai nhưng chưa coi là đạt nếu chưa xác minh trên thiết bị.**
 
-## Giai đoạn C — Dùng hằng ngày thoải mái
+- [ ] Chạy bootstrap, kiểm tra Manifest, nfc_tech_filter.xml và MainActivity.kt sau khi vá.
+- [ ] Thử app đang mở, app khác ở foreground, Home, màn hình khóa nhưng vẫn sáng.
+- [ ] Xác minh UID native được chuyển sang Dart khi Activity đang tồn tại và khi được tạo lại.
+- [ ] Mỗi lần chạm hợp lệ chỉ ghi một event; UID lạ và tag inactive không ghi.
+- [ ] Kiểm tra tự lùi về app trước khi returnToPreviousApp bật.
+- [ ] Kiểm tra app chooser của Android/Samsung và ảnh hưởng đến ứng dụng NFC khác.
+- [ ] Thử NFC tắt, tag không đọc được, app bị kill và chạm liên tiếp nhanh.
 
-### M8. Hoàn tác ngay trên Hôm nay
-- **Mục tiêu:** bấm nhầm không phải sang trang Lịch sử để xóa.
-- **Việc cần làm:** thông báo sau mỗi lần ghi có nút "Hoàn tác" xóa sự kiện vừa ghi.
-- **Xong khi:** bấm nhầm, bấm Hoàn tác, sự kiện biến mất khỏi timeline và danh sách.
+**Rủi ro đã biết:** TECH_DISCOVERED với công nghệ NfcA khá rộng. Tra UID trong Dart có thể ngăn ghi event không hợp lệ nhưng không ngăn Android khởi chạy app khi thẻ NfcA không liên quan được chạm. Nếu xảy ra, cần thu hẹp bộ lọc/đổi thiết kế. Không giả định UID không thể bị sao chép.
 
-### M9. Quên kết thúc qua đêm
-- **Mục tiêu:** quên kết thúc CNC hay thiết kế hôm trước không làm hỏng số liệu ngày sau.
-- **Việc cần làm:** khi mở sang ngày mới mà còn việc chưa kết thúc từ hôm trước, hiện lời nhắc đóng nhanh (chọn giờ kết thúc); hiện huy hiệu cảnh báo ở tab Lịch sử.
-- **Xong khi:** để một việc mở qua đêm, sáng hôm sau app nhắc và đóng được trong 2 thao tác.
-- **Quyết định cần bạn:** có việc nào được phép chạy xuyên đêm (ví dụ CNC chạy qua đêm) không? Nếu có thì phải tính giờ xuyên ngày thay vì cảnh báo.
+**Giới hạn:** không yêu cầu NFC hoạt động khi màn hình tắt hẳn; phạm vi mục tiêu là màn hình khóa đang sáng.
 
-### M10. Phản hồi khi chạm thẻ ở nền
-- **Mục tiêu:** biết ngay đã ghi xong mà không cần nhìn màn hình.
-- **Việc cần làm:** rung khác nhau cho thành công và lỗi; tùy chọn âm báo.
-- **Xong khi:** chạm thẻ khi điện thoại trong túi áo thì cảm nhận được rung xác nhận.
-- **Phụ thuộc:** M4.
+## M4 — Kiểm chứng backup/restore
 
-### M11. Trạng thái NFC tự làm mới
-- **Mục tiêu:** bật NFC sau khi mở app không phải mở lại app.
-- **Việc cần làm:** kiểm tra lại NFC mỗi khi quay về app và khi bấm biểu tượng NFC.
-- **Xong khi:** tắt NFC, mở app (icon đỏ), bật NFC, quay lại app, icon xanh và quét được.
+- [ ] Chọn thư mục bằng Android system picker.
+- [ ] Sau khi sửa dữ liệu, kiểm tra backup tự động sau debounce cập nhật hai file JSON luân phiên.
+- [ ] Sao lưu thủ công khi có dữ liệu.
+- [ ] Khôi phục vào database sạch, đối chiếu tag, UID, active, event, timestamp và tổng giờ.
+- [ ] Khôi phục vào database đã có dữ liệu; xác nhận merge/dedupe không nhân đôi event.
+- [ ] Thử file JSON hỏng/rỗng/thiếu trường/phiên bản không hỗ trợ và quyền thư mục bị mất.
+- [ ] Gỡ/cài lại app, chọn lại thư mục, khôi phục; xác nhận database trống không ghi đè backup cũ.
 
----
+**Đạt khi:** dữ liệu không bị âm thầm mất và lỗi có thông báo rõ ràng.
 
-## Giai đoạn D — Hoàn thiện
+## M5 — Sửa vấn đề kỹ thuật trước khi dùng lâu dài
 
-### M12. Cài đặt nhỏ
-- **Việc cần làm:** bật tắt việc tự lùi về nền (hiện là hằng số trong code), giờ mặc định của timeline (7 đến 19), làm tròn phút khi tổng kết.
-- **Xong khi:** đổi cài đặt, thoát app, mở lại, cài đặt vẫn giữ.
+- [ ] Bỏ đường dẫn tuyệt đối theo máy cá nhân khỏi android/settings.gradle.kts.
+- [ ] Cập nhật tài liệu về UID: default_tags.dart hiện chứa UID cụ thể cho 7 tag; quyết định có muốn công khai UID trong repo hay không.
+- [ ] Thêm test thực chất cho BackupService, Repository, UID dedupe và UI; test/widget_test.dart hiện chỉ là placeholder.
+- [ ] Mở rộng CI để kiểm tra build Android và kiểm tra script PowerShell trên Windows.
+- [ ] Kiểm tra version/schema backup khi đọc và restore.
+- [ ] Quyết định quy tắc tiến trình còn mở qua nửa đêm: chỉ cảnh báo, đóng theo giờ người dùng chọn, hay tính xuyên ngày.
 
-### M13. Bản cài ổn định để dùng thật
-- **Mục tiêu:** cài một lần, dùng lâu, cập nhật không mất dữ liệu.
-- **Việc cần làm:** tạo khóa ký riêng (không dùng khóa debug), build bản release, cài lên S23, ghi cách cập nhật mà không gỡ app.
-- **Xong khi:** cài bản mới đè lên bản cũ, dữ liệu vẫn còn.
-- **Phụ thuộc:** M2, M6.
+## M6 — Dùng hằng ngày và phát hành
 
----
+- [ ] Hoàn tác nhanh sau khi chạm nhầm.
+- [ ] Phản hồi NFC bằng rung/âm báo có thể cấu hình.
+- [ ] Trạng thái NFC tự làm mới khi quay lại app sau khi bật NFC trong Settings.
+- [ ] Màn tổng kết cuối ngày và sao chép báo cáo nếu đã thống nhất định dạng đầu ra.
+- [ ] Tạo signing key release riêng; cập nhật bản cài đè lên bản trước mà không gỡ app.
+- [ ] Thực hiện backup/restore cuối cùng trước khi dùng dữ liệu thật.
 
-## Thứ tự làm đề xuất
+## Thứ tự đề xuất
 
-`M1 -> M2 -> M3 -> M4 -> M5 -> M6 -> M7 -> M8 -> M9 -> M10 -> M11 -> M12 -> M13`
+M0 → M1 → M2 → M3 → M4 → M5 → M6.
 
-Nếu thời gian ít: **M1, M2, M4, M6** là bốn bước quan trọng nhất (biết chạy được, không mất dữ liệu, thẻ ở nền hoạt động, có bản sao lưu).
+Ưu tiên trước mắt: dựng được bản mới, xác minh 7 thẻ, kiểm thử NFC nền và kiểm chứng backup. Không sửa logic nghiệp vụ đang hoạt động chỉ vì cảnh báo dữ liệu bất thường xuất hiện đúng thiết kế.
